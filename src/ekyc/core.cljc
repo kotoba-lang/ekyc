@@ -13,7 +13,12 @@
 
 (defn completion [session evidence]
   (let [required (set (:ekyc/required-checks session))
-        verified (set (keep #(when (= :verified (:ekyc/status %)) (:ekyc/check %)) evidence))
+        ;; Evidence is an append-only log -- a later re-screen (e.g. a
+        ;; periodic sanctions/PEP re-check) must supersede an earlier
+        ;; :verified result for the same check, not merely add to it.
+        latest-by-check (reduce (fn [acc e] (assoc acc (:ekyc/check e) e)) {} evidence)
+        verified (set (keep (fn [[check e]] (when (= :verified (:ekyc/status e)) check))
+                            latest-by-check))
         missing (set (remove verified required))]
     {:ekyc/id (:ekyc/id session)
      :ekyc/complete? (empty? missing)

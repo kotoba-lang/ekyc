@@ -28,6 +28,23 @@
             :ekyc/non-adjudicating true}
            (c/completion s [live doc])))))
 
+(deftest later-rejection-supersedes-earlier-verification
+  ;; A required check must use its LATEST evidence, not "ever verified" --
+  ;; a subsequent re-screen (e.g. a periodic sanctions/PEP re-check) that
+  ;; comes back negative must not be masked by a stale earlier :verified
+  ;; result for the same check.
+  (let [s (m/session "e1" "did:web:example.com:alice" {:required-checks #{:sanctions}})
+        ev1 (m/evidence s :sanctions :verified {:observed-at "2026-01-01T00:00:00Z"})
+        ev2 (m/evidence s :sanctions :rejected {:observed-at "2026-06-01T00:00:00Z"})]
+    (is (false? (:ekyc/complete? (c/completion s [ev1 ev2]))))
+    (is (= :review (:ekyc/status (c/completion s [ev1 ev2]))))))
+
+(deftest later-verification-supersedes-earlier-rejection
+  (let [s (m/session "e1" "did:web:example.com:alice" {:required-checks #{:sanctions}})
+        ev1 (m/evidence s :sanctions :rejected {:observed-at "2026-01-01T00:00:00Z"})
+        ev2 (m/evidence s :sanctions :verified {:observed-at "2026-06-01T00:00:00Z"})]
+    (is (true? (:ekyc/complete? (c/completion s [ev1 ev2]))))))
+
 (deftest emits-ekyc-datoms
   (let [s (m/session "e1" "did:web:example.com:alice" {:required-checks #{:liveness}})
         live (m/evidence s :liveness :verified {:evidence-ref "blob://live"})
