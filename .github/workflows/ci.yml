@@ -19,8 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout identity sibling (deps.edn :local/root)
-        run: git clone --depth 1 https://github.com/kotoba-lang/identity ../identity
+      - name: Checkout sibling deps (deps.edn :local/root)
+        run: |
+          git clone --depth 1 https://github.com/kotoba-lang/identity ../identity
+          git clone --depth 1 https://github.com/kotoba-lang/html ../html
+          git clone --depth 1 https://github.com/kotoba-lang/css ../css
 
       - name: Setup JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
