@@ -55,11 +55,12 @@ as legally valid — the two are meant to compose, not compete.
 | | |
 |---|---|
 | Role | capability |
-| Tests | 105 assertions in `kotoba.ekyc.*` (144 total in this repo), all green |
+| Tests | 174 assertions in `kotoba.ekyc.*` (213 total in this repo), all green |
 | Operator console (UI/UX) | yes |
 | Export (CSV/JSON) | yes |
 | Shared CSS design system | yes (css.core/operator-theme) |
 | Jurisdictions covered | JPN only — see Why (missing jurisdictions are uncovered, never fabricated) |
+| Cross-repo linkage graph | yes — `kotoba.ekyc.jurisdiction-graph` (Datomic + DataScript, 188 real `cloud-itonami-iso3166-*` countries structurally present, JPN researched) |
 
 ### Contract
 
@@ -114,6 +115,52 @@ themselves (those stay opaque refs held by a real vendor/custody adapter).
 (ex/methods->csv ekyc/method-catalog)   ; the recognized-method reference table
 (ex/verifications->json verifications)
 ```
+
+### `kotoba.ekyc.jurisdiction-graph` — cross-repo regulatory-linkage graph
+
+A real, queryable graph linking `kotoba.ekyc`'s method catalog to the
+`cloud-itonami-iso3166-*` family (per-country "Market-Entry Compliance"
+actor repos in the `cloud-itonami` GitHub org), loadable into both
+**Datomic** (JVM, server-side queryable) and **DataScript** (in-browser
+queryable) — not more static markdown citations.
+
+```clojure
+(require '[kotoba.ekyc.jurisdiction-graph :as jg])
+
+(count jg/countries)          ; => 188 -- real per-country repos, verified
+                               ;    (not 223; see docs/adr/0002 for why)
+jg/schema-datomic             ; full Datomic schema vocabulary
+jg/schema-datascript          ; the empirically-verified DataScript subset
+                               ; (derive-datascript-schema jg/schema-datomic)
+
+(jg/coverage-report)
+;; => {:total-countries 188 :researched 1 :researched-jurisdictions ["JPN"]
+;;     :not-yet-researched 187 :note "... never fabricate ..."}
+```
+
+**Honest coverage: 1 of 188, not "223-country KYC regulatory database."**
+Every one of the 188 real `cloud-itonami-iso3166-*` country repos gets a
+structurally complete `:country/*` entity (queryable across the whole
+family), but `:country/recognizes-method` edges — each carrying its own
+jurisdiction-specific legal-basis citation via a reified `:recognition/*`
+edge entity, since the citation is jurisdiction-specific even when a
+method concept is shared — exist ONLY for JPN, derived from
+`kotoba.ekyc/method-catalog`'s real 犯収法施行規則 citations. The other 187
+countries carry `:country/coverage-status :not-yet-researched` — absence
+of an edge means "not yet researched," never "no requirements," matching
+this repo's own "missing jurisdictions are uncovered, never fabricated"
+rule and the rest of the `cloud-itonami-*` fleet's citation-honesty
+convention (e.g. `vcfund.facts/coverage`).
+
+DataScript compatibility is proven, not claimed:
+`test/kotoba/ekyc/jurisdiction_graph_test.cljc` transacts
+`schema-datascript` + real tx-data into an actual `datascript.core` conn
+(`datascript/datascript` on the JVM — the real portable `.cljc` DataScript
+library, same code that compiles to run in a browser) and runs the
+example Datalog queries in `jg/queries` against it. See
+[`docs/adr/0002-iso3166-jurisdiction-graph.md`](docs/adr/0002-iso3166-jurisdiction-graph.md)
+for the empirical schema-compatibility probe, the 223→188 verification
+method, and the design rationale.
 
 ### Why
 
