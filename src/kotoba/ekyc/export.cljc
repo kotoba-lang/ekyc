@@ -5,7 +5,7 @@
   JSON for compliance/audit export. Pure data -> text: no network, no I/O.
   Never exports evidence payloads themselves (those are opaque refs held by
   a real vendor/custody adapter) -- only the structural disposition."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [kotoba.ekyc :as ekyc]))
 
 (defn- csv-cell [v]

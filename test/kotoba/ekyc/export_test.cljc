@@ -1,5 +1,5 @@
 (ns kotoba.ekyc.export-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [kotoba.ekyc :as ekyc]
             [kotoba.ekyc.export :as ex]))

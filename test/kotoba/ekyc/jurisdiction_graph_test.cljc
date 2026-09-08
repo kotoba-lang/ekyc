@@ -8,7 +8,7 @@
   proves the identical point the identical way) and runs real Datalog
   queries against it. If `schema-datascript` regressed to include a
   Datomic-only key, `create-conn` below would throw immediately."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [datascript.core :as d]
             [kotoba.ekyc :as ekyc]
@@ -31,7 +31,7 @@
   (testing "every repo-url follows the family's real naming convention"
     (is (every? (fn [{:keys [iso3 repo-url]}]
                   (= repo-url (str "https://github.com/cloud-itonami/cloud-itonami-iso3166-"
-                                    (str/lower-case iso3))))
+                                    (str/lower iso3))))
                 jg/countries))))
 
 (deftest coverage-status-test
