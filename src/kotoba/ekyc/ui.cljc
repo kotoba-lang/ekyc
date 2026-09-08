@@ -7,7 +7,7 @@
   rendering (evidence refs are opaque strings, never images). The governor
   gates acceptance; this view only observes, so it can never leak a write
   path."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [html.core :as html]
             [css.core :as css]
             [kotoba.ekyc :as ekyc]))
