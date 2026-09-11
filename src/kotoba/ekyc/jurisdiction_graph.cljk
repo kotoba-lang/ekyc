@@ -18,7 +18,7 @@
                            conn without error. This is not a claimed
                            subset -- `derive-datascript-schema` is the
                            actual (mechanical, inspectable) transform, and
-                           `test/kotoba/ekyc/jurisdiction_graph_test.cljc`
+                           `test/kotoba/ekyc/jurisdiction_graph_test.cljk`
                            proves the result loads by transacting it into
                            `datascript.core` (the real library, not a
                            reimplementation) and running Datalog queries
@@ -185,7 +185,7 @@
 
 (def schema-datascript
   "The DataScript-compatible variant of `schema-datomic`. See
-  `derive-datascript-schema` and `test/kotoba/ekyc/jurisdiction_graph_test.cljc`
+  `derive-datascript-schema` and `test/kotoba/ekyc/jurisdiction_graph_test.cljk`
   for the real datascript.core proof (create-conn + transact + query all
   succeed against THIS value, not an aspirational claim)."
   (derive-datascript-schema schema-datomic))

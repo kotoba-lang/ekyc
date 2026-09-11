@@ -1,6 +1,6 @@
 (ns ekyc.adapters.production-provider-core
   ;; Vertical-slice guest (ADR-2608261100): the product semantics of
-  ;; src/ekyc/adapters/production_provider.cljc — which endpoint each
+  ;; src/ekyc/adapters/production_provider.cljk — which endpoint each
   ;; provider operation targets, with which HTTP method, and how payload /
   ;; query options attach — as plain Kotoba values.
   ;;

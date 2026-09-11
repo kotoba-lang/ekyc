@@ -171,7 +171,7 @@ specifically because of this, verified in `load-into-real-datascript-test`.
 small, inspectable, mechanical transform (drop `:db/fulltext`; drop
 `:db/valueType` unless `:db.type/ref`) — not a hand-maintained parallel
 definition that could silently drift from `schema-datomic`.
-`test/kotoba/ekyc/jurisdiction_graph_test.cljc` transacts the derived
+`test/kotoba/ekyc/jurisdiction_graph_test.cljk` transacts the derived
 schema plus real tx-data into a real `datascript.core` conn and runs every
 example query in `queries` against it, asserting real result shapes (e.g.
 exactly 10 rows for `:jpn-recognized-methods`, matching
