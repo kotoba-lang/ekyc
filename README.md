@@ -153,7 +153,7 @@ rule and the rest of the `cloud-itonami-*` fleet's citation-honesty
 convention (e.g. `vcfund.facts/coverage`).
 
 DataScript compatibility is proven, not claimed:
-`test/kotoba/ekyc/jurisdiction_graph_test.cljc` transacts
+`test/kotoba/ekyc/jurisdiction_graph_test.cljk` transacts
 `schema-datascript` + real tx-data into an actual `datascript.core` conn
 (`datascript/datascript` on the JVM — the real portable `.cljc` DataScript
 library, same code that compiles to run in a browser) and runs the
