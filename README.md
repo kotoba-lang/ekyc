@@ -183,5 +183,5 @@ MIT — see [LICENSE](LICENSE).
 ## Test
 
 ```bash
-clojure -M:test
+kbb -M:test
 ```

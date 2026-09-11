@@ -176,7 +176,7 @@ schema plus real tx-data into a real `datascript.core` conn and runs every
 example query in `queries` against it, asserting real result shapes (e.g.
 exactly 10 rows for `:jpn-recognized-methods`, matching
 `kotoba.ekyc/method-catalog`'s real 10 entries) — 213 assertions across 49
-tests, `clojure -M:test`, all green.
+tests, `kbb -M:test`, all green.
 
 `schema-datomic` itself follows standard, documented Datomic schema
 vocabulary (`:db/valueType`, `:db/fulltext`, `:db/doc`) but is not
