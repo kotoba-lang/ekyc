@@ -1,6 +1,7 @@
 (ns ekyc.identity-authority-test
   (:require [cljs.test :refer-macros [deftest is async]] [ekyc.identity-authority :as a]
-            [ekyc.identity-policy-test :as fixture] [ekyc.identity-crypto :as crypto] [ekyc.identity-passport-test :refer [rejects]]))
+            [ekyc.identity-policy-test :as fixture] [ekyc.identity-trust-test :as web-fixture]
+            [ekyc.identity-crypto :as crypto] [ekyc.identity-passport-test :refer [rejects]]))
 (deftest effects-require-durable-commit
   (async done
     (let [read! #(js/Promise.resolve {:revision 7 :state fixture/reviewed})]
@@ -33,4 +34,25 @@
                               (.then (fn [result]
                                        (is (true? (:ok result)))
                                        (rejects #(a/review (.-publicKey keys) "reviewer-key" "reviewer" token "app" "different-challenge" fixture/now read! cas!)))))))))))
+        (.catch #(is false (str %))) (.finally done))))
+
+(deftest signed-web-review-and-app-link-use-closed-wire-enums
+  (async done
+    (-> (.generateKey (.-subtle js/crypto) "Ed25519" true #js ["sign" "verify"])
+        (.then
+         (fn [keys]
+           (js/Promise.all
+            (clj->js
+             (map (fn [[command state expected-score]]
+                    (let [command (assoc command :aud "https://kotoba.cloud" :nonce "review-nonce"
+                                         :iat (crypto/seconds fixture/now) :exp (+ (crypto/seconds fixture/now) 120))]
+                      (-> (crypto/sign (.-privateKey keys) "reviewer-key" "kotoba-review+jwt" command)
+                          (.then (fn [token]
+                                   (a/review (.-publicKey keys) "reviewer-key" "reviewer" token "web" "review-nonce" fixture/now
+                                             #(js/Promise.resolve {:revision 1 :state state})
+                                             (fn [_ committed]
+                                               (is (= expected-score (web-fixture/score committed "web" fixture/now)))
+                                               (js/Promise.resolve {:status :committed :revision 2 :receipt-ref "private:web-commit"}))))))))
+                  [[web-fixture/web-approval web-fixture/web-reviewed 60]
+                   [web-fixture/link-command web-fixture/both-approved 100]])))))
         (.catch #(is false (str %))) (.finally done))))

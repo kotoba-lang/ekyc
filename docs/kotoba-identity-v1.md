@@ -1,5 +1,9 @@
 # Kotoba Identity v1 — first-party verification components
 
+The current profile is v2 with a Web-first reviewed route and separately weighted
+app route; see [weighted trust routes](weighted-trust-routes.md). The passport
+mechanism described below remains the app-route verifier.
+
 This release adds working cryptographic verification and identity state transitions.
 It does not turn the pre-existing structural method catalog into an automated
 legal eKYC provider. Production enrollment remains closed until the integration
@@ -120,7 +124,7 @@ quota exhaustion and unconfirmed commit paths are covered.
 
 ### Observed build results, 2026-09-12
 
-- Common host suite: 7 tests / 49 assertions, zero failures; release builds
+- Common host suite after weighted-route update: 11 tests / 93 assertions, zero failures; release builds
   completed with zero compiler warnings via the explicit compatibility mapping.
 - iOS arm64 bridge: `swift build --sdk <iPhoneOS26.5.sdk> --triple
   arm64-apple-ios15.0` succeeded. No signing, installation or physical read occurred.

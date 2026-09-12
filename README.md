@@ -11,6 +11,10 @@ The new `ekyc.passport`, `ekyc.identity-policy`, `ekyc.identity-crypto` and
 review/credential lifecycle, holder-bound signed presentations and commit-gated
 free-quota effects. `native/ios` adds the NFC capture transport.
 
+The v2 profile adds a [Web-first weighted trust route](docs/weighted-trust-routes.md):
+signed Web review contributes 60 points and an independently reviewed app passport
+route contributes 80, capped at 100. Review, scope and screening remain hard gates.
+
 These are tested components, **not a deployed identity provider**. Read
 [the implemented profile and activation boundaries](docs/kotoba-identity-v1.md).
 The original method catalog described below remains structural; its claims do

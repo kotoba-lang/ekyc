@@ -1,6 +1,7 @@
 (ns ekyc.identity-crypto-test
   (:require [cljs.test :refer-macros [deftest is async]] [ekyc.identity-crypto :as c]
-            [ekyc.identity-policy-test :as fixture] [ekyc.identity-passport-test :refer [rejects]]))
+            [ekyc.identity-policy-test :as fixture] [ekyc.identity-passport-test :refer [rejects]]
+            [ekyc.identity-trust :as trust]))
 (def issuer "https://identity.kotoba.cloud")
 (defn prepare [now]
   (-> (js/Promise.all #js [(.generateKey (.-subtle js/crypto) "Ed25519" true #js ["sign" "verify"])
@@ -17,8 +18,9 @@
                                    :issued-at now :expires-at (+ now 60000) :holder-key-id key-id
                                    :screening {:status :clear :checked-at now :expires-at (+ now 60000)}
                                    :scope {:status :approved :issued-at now :expires-at (+ now 60000)})]
+                 (let [record (assoc record :trust-routes {:app-passport (trust/evidence record :app-passport "private:review" now (+ now 60000))})]
                  (-> (c/issue (.-privateKey issuer-key) issuer "issuer-1" "app" record "pairwise-subject" jwk now)
-                     (.then #(assoc context :credential % :record record))))))))
+                     (.then #(assoc context :credential % :record record)))))))))
 (defn present-fixture [{:keys [^js holder credential now] :as context}]
   (-> (c/present (.-privateKey holder) "holder" credential "https://kotoba.cloud" "server-random-nonce" now)
       (.then #(assoc context :proof %))))

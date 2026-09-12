@@ -2,16 +2,19 @@
   "Portable first-party identity state machine. Inputs marked verified are host
   events only; never deserialize public requests directly into these commands.
   The host must CAS the complete state in a private canonical Kotobase ref before
-  releasing any returned effect. No atom, SQL, clock or implicit authority here.")
+  releasing any returned effect. No atom, SQL, clock or implicit authority here."
+  (:require [ekyc.identity-trust :as trust]))
 
-(def version "kotoba-identity-2026-09-v1")
+(def version "kotoba-identity-2026-09-v2")
 (defn text? [x] (and (string? x) (<= 1 (count x) 512)))
 (defn fresh? [start end now] (and (number? start) (number? end) (<= 0 start now) (< now end)))
 (defn denied [reason] {:ok false :reason reason})
 (defn eligibility [record now]
   (cond
     (not= :approved (:status record)) :review-required
+    (not= version (:policy-version record)) :identity-policy-outdated
     (not (fresh? (:issued-at record) (:expires-at record) now)) :identity-expired
+    (not (:sufficient (trust/summary record now))) :trust-route-required
     (not= :clear (get-in record [:screening :status])) :screening-required
     (not (fresh? (get-in record [:screening :checked-at]) (get-in record [:screening :expires-at]) now)) :screening-expired
     (not= :approved (get-in record [:scope :status])) :scope-required
@@ -45,13 +48,59 @@
         :else {:ok true :state (assoc-in state [:applications id]
                                        (assoc record :status :review :document
                                               (select-keys (:document event) [:status :adult :document-tag :sod-digest :dg2-digest :trust-version :document-expires-at])
-                                              :submitted-at now))})
+                                              :route :app-passport :submitted-at now))})
+      :web-document
+      (let [doc (:document event)]
+        (if (and record (= principal (:principal record)) (= :pending (:status record))
+                 (< now (:expires-at record)) (= (:nonce record) (:nonce event))
+                 (true? (:holder-proof-verified event))
+                 (= :captured-unverified (:status doc))
+                 (every? #(text? (get doc %)) [:document-image-digest :live-capture-digest :capture-evidence-ref]))
+          {:ok true :state (assoc-in state [:applications id]
+                                    (assoc record :status :review :route :web-reviewed :submitted-at now
+                                           :document (select-keys doc [:status :document-image-digest :live-capture-digest :capture-evidence-ref])))}
+          (denied :invalid-web-evidence)))
+      :approve-web
+      (let [doc (:document record) screening (:screening event) scope (:scope event)
+            expires (:expires-at event) document-expires (:document-expires-at event)
+            tag (:document-tag event) previous (get-in state [:documents tag])]
+        (cond
+          (not (and record (= :review (:status record)) (= :web-reviewed (:route record))
+                     (= principal (:principal record)) (true? (:operator-signature-verified event))
+                     (contains? (:reviewers state) actor) (not= actor principal)
+                     (= (:document-image-digest doc) (:document-image-digest event))
+                     (= (:live-capture-digest doc) (:live-capture-digest event))
+                     (= :supervised-live-video-document-comparison (:holder-method event))
+                     (true? (:document-checked event)) (true? (:adult event))
+                     (true? (:holder-match event)) (true? (:liveness event))
+                     (text? tag) (text? (:review-evidence-ref event))
+                     (number? expires) (number? document-expires)
+                     (< now expires) (<= expires document-expires (+ now (* 16 366 86400000)))
+                     (<= expires (+ now (* 365 86400000)))
+                     (= :clear (:status screening)) (text? (:evidence-ref screening))
+                     (every? (set (:coverage screening)) [:sanctions :pep :adverse-media])
+                     (fresh? (:checked-at screening) (:expires-at screening) now)
+                     (<= (- (:expires-at screening) (:checked-at screening)) 86400000)
+                     (= :approved (:status scope)) (text? (:id scope))
+                     (fresh? (:issued-at scope) (:expires-at scope) now))) (denied :web-review-incomplete)
+          (and previous (not= principal previous)) (denied :document-already-bound)
+          :else {:ok true
+                 :state (-> state
+                            (assoc-in [:documents tag] principal)
+                            (assoc-in [:credentials id] {:status :active :application-id id})
+                            (assoc-in [:applications id]
+                                      (assoc record :status :approved :issued-at now :expires-at expires
+                                             :reviewer actor :review-evidence-ref (:review-evidence-ref event)
+                                             :document (assoc doc :document-tag tag :document-expires-at document-expires)
+                                             :screening screening :scope scope
+                                             :trust-routes {:web-reviewed (trust/evidence record :web-reviewed (:review-evidence-ref event) now expires)})))
+                 :effects [{:type :issue-credential :application-id id}]}))
       :approve
       (let [doc (:document record) previous (get-in state [:documents (:document-tag doc)])
             screening (:screening event) scope (:scope event)
             expires (:expires-at event)]
         (cond
-          (not (and record (= :review (:status record)) (= principal (:principal record))
+          (not (and record (= :review (:status record)) (= :app-passport (:route record)) (= principal (:principal record))
                      (= true (:operator-signature-verified event)) (contains? (:reviewers state) actor)
                      (not= actor principal) (= (:sod-digest doc) (:sod-digest event))
                      (= (:dg2-digest doc) (:dg2-digest event))
@@ -73,12 +122,42 @@
                                     (assoc-in [:credentials id] {:status :active :application-id id})
                                     (assoc-in [:applications id] (assoc record :status :approved :issued-at now :expires-at expires
                                                                        :reviewer actor :review-evidence-ref (:review-evidence-ref event)
-                                                                       :screening screening :scope scope)))
+                                                                       :screening screening :scope scope
+                                                                       :trust-routes {:app-passport (trust/evidence record :app-passport (:review-evidence-ref event) now expires)})))
                  :effects [{:type :issue-credential :application-id id}] }))
+      :link-route
+      (let [source (get-in state [:applications (:source-id event)]) route (:route event)
+            evidence (get-in source [:trust-routes route]) existing (get-in record [:trust-routes route])]
+        (if (and record source (not= id (:source-id event))
+                 (= :approved (:status record)) (= :approved (:status source))
+                 (= principal (:principal record) (:principal source))
+                 (= (:holder-key-id record) (:holder-key-id source))
+                 (true? (:operator-signature-verified event)) (contains? (:reviewers state) actor)
+                 (not= actor principal) (true? (:same-person-verified event))
+                 (text? (:link-evidence-ref event))
+                 (nil? (eligibility record now)) (nil? (eligibility source now))
+                 ;; Only original approvals can be linked; no transitive copies.
+                 (= (:source-id event) (:source-application-id evidence))
+                 (trust/valid? record route evidence now)
+                 (not (trust/valid? record route existing now)))
+          {:ok true :state (assoc-in state [:applications id :trust-routes route]
+                                    (assoc evidence :link-evidence-ref (:link-evidence-ref event) :linked-by actor))}
+          (denied :route-link-not-authorized)))
+      :revoke-route
+      (let [route (:route event) evidence (get-in record [:trust-routes route])]
+        (if (and record (contains? trust/weights route) evidence
+                 (= id (:source-application-id evidence))
+                 (true? (:operator-signature-verified event)) (contains? (:reviewers state) actor)
+                 (text? (:reason-ref event)))
+          {:ok true :state (-> (trust/invalidate-origin state id route)
+                               (trust/withdraw-unsupported-credentials now)
+                               (assoc-in [:applications id :trust-routes route :reason-ref] (:reason-ref event)))}
+          (denied :route-revocation-not-authorized)))
       :revoke
       (if (and record (true? (:operator-signature-verified event)) (contains? (:reviewers state) actor)
                (text? (:reason-ref event)))
-        {:ok true :state (-> state
+        {:ok true :state (-> (trust/invalidate-origin state id nil)
+                             (trust/withdraw-unsupported-credentials now)
                              (assoc-in [:applications id] (assoc record :status :revoked :revoked-at now :reason-ref (:reason-ref event)))
                              (assoc-in [:credentials id :status] :revoked))}
         (denied :revocation-not-authorized))
