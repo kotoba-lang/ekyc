@@ -21,13 +21,18 @@
                  (str "b" (base32 buf)))))))
 (defn context [record slot]
   (crypto/utf8 (js/JSON.stringify #js ["kotoba-identity-evidence-v1" (:id record) (:principal record) (name slot) (:nonce record)])))
+(defn- require-key! [key]
+  (p/require! (and key (= "secret" (.-type key)) (false? (.-extractable key))
+                   (= "AES-GCM" (.-name (.-algorithm key))) (= 256 (.-length (.-algorithm key)))) :invalid-vault-key))
 (defn seal [key aad bytes]
+  (require-key! key)
   (let [iv (.getRandomValues js/crypto (js/Uint8Array. 12))]
     (-> (.encrypt (.-subtle js/crypto) #js {:name "AES-GCM" :iv iv :additionalData aad :tagLength 128} key bytes)
         (.then (fn [encrypted]
                  (let [out (js/Uint8Array. (+ 12 (.-byteLength encrypted)))]
                    (.set out iv) (.set out (js/Uint8Array. encrypted) 12) out))))))
 (defn unseal [key aad bytes]
+  (require-key! key)
   (p/require! (<= 29 (.-byteLength bytes) (+ 6291456 28)) :invalid-sealed-block)
   (.decrypt (.-subtle js/crypto) #js {:name "AES-GCM" :iv (.slice bytes 0 12) :additionalData aad :tagLength 128}
             key (.slice bytes 12)))
