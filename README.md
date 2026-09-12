@@ -206,3 +206,7 @@ MIT — see [LICENSE](LICENSE).
 ```bash
 kbb -M:test
 ```
+
+Browser intake, signed review and per-case encrypted vault components are described
+in [the intake and vault contract](docs/browser-intake-and-vault.md). Production
+private storage/KMS and reviewer enrollment remain unconnected; intake is closed.
