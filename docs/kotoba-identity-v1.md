@@ -120,7 +120,7 @@ quota exhaustion and unconfirmed commit paths are covered.
 
 ### Observed build results, 2026-09-12
 
-- Common host suite: 6 tests / 44 assertions, zero failures; release builds
+- Common host suite: 7 tests / 49 assertions, zero failures; release builds
   completed with zero compiler warnings via the explicit compatibility mapping.
 - iOS arm64 bridge: `swift build --sdk <iPhoneOS26.5.sdk> --triple
   arm64-apple-ios15.0` succeeded. No signing, installation or physical read occurred.

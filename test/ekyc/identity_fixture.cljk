@@ -26,7 +26,7 @@
     (js/Uint8Array. (clj->js (concat [97 91 95 31 88] (array-seq mrz))))))
 (defn build
   ([] (build {}))
-  ([{:keys [revoked? stale?]}]
+  ([{:keys [revoked? stale? missing-attrs? wrong-content-type?]}]
    (let [now (js/Date.now) algorithm #js {:name "ECDSA" :namedCurve "P-256"}]
      (-> (js/Promise.all #js [(.generateKey (.-subtle js/crypto) algorithm true #js ["sign" "verify"])
                               (.generateKey (.-subtle js/crypto) algorithm true #js ["sign" "verify"])])
@@ -56,6 +56,14 @@
                                     signed (pki/SignedData. #js {:version 3 :certificates #js [signer]
                                                                 :encapContentInfo (pki/EncapsulatedContentInfo. #js {:eContentType "2.23.136.1.1.1" :eContent (asn/OctetString. #js {:valueHex content})})
                                                                 :signerInfos #js [(pki/SignerInfo. #js {:version 1 :sid (pki/IssuerAndSerialNumber. #js {:issuer (.-issuer signer) :serialNumber (.-serialNumber signer)})})]})]
-                                (-> (.sign signed (.-privateKey signer-key) 0 "SHA-256")
+                                (-> (passport/digest "SHA-256" content)
+                                    (.then (fn [hash]
+                                             (when-not missing-attrs?
+                                               (aset (aget (.-signerInfos signed) 0) "signedAttrs"
+                                                     (pki/SignedAndUnsignedAttributes.
+                                                      #js {:type 0 :attributes
+                                                           #js [(pki/Attribute. #js {:type "1.2.840.113549.1.9.3" :values #js [(asn/ObjectIdentifier. #js {:value (if wrong-content-type? "1.2.840.113549.1.7.1" "2.23.136.1.1.1")})]})
+                                                                (pki/Attribute. #js {:type "1.2.840.113549.1.9.4" :values #js [(asn/OctetString. #js {:valueHex hash})]})]})))
+                                             (.sign signed (.-privateKey signer-key) 0 "SHA-256")))
                                     (.then (fn [] {:now now :policy {:trusted-cscas [(encoded root)] :crls [(encoded crl)] :trust-version "SYNTHETIC-TEST-ONLY" :trust-expires-at (+ now 86400000)}
                                                     :evidence {:sod (encoded (pki/ContentInfo. #js {:contentType "1.2.840.113549.1.7.2" :content (.toSchema signed true)})) :dg1 dg1 :dg2 dg2}}))))))))))))))))))

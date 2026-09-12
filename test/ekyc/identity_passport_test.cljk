@@ -23,6 +23,10 @@
         (.then (fn [{:keys [policy evidence now]}] (rejects #(passport/verify-passport policy evidence now))))
         (.then #(fixture/build {:stale? true}))
         (.then (fn [{:keys [policy evidence now]}] (rejects #(passport/verify-passport policy evidence now))))
+        (.then #(fixture/build {:missing-attrs? true}))
+        (.then (fn [{:keys [policy evidence now]}] (rejects #(passport/verify-passport policy evidence now))))
+        (.then #(fixture/build {:wrong-content-type? true}))
+        (.then (fn [{:keys [policy evidence now]}] (rejects #(passport/verify-passport policy evidence now))))
         (.catch #(is false (str "positive cryptographic path failed: " (.-stack %))))
         (.finally done))))
 (deftest strict-mrz

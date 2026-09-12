@@ -81,6 +81,20 @@
       (require! (= (count entries) (count (set (map first entries)))) :duplicate-data-group)
       {:algorithm (get hash-oids oid) :hashes (into {} entries)})))
 
+(defn signed-attributes! [^js signed]
+  (let [^js signer (aget (.-signerInfos signed) 0)
+        attributes (some-> signer .-signedAttrs .-attributes array-seq)
+        types (filter #(= "1.2.840.113549.1.9.3" (.-type ^js %)) attributes)
+        digests (filter #(= "1.2.840.113549.1.9.4" (.-type ^js %)) attributes)]
+    (require! (and (= 3 (.-version signed)) (<= 2 (count attributes) 16)
+                   (= 1 (count types)) (= 1 (count digests))) :invalid-signed-attributes)
+    (let [^js content-type (first types) ^js message-digest (first digests)
+          ^js oid (aget (.-values content-type) 0)]
+      (require! (and (= 1 (.-length (.-values content-type))) (= 1 (.-length (.-values message-digest)))
+                     (instance? asn/ObjectIdentifier oid)
+                     (= "2.23.136.1.1.1" (.toString (.-valueBlock oid)))
+                     (instance? asn/OctetString (aget (.-values message-digest) 0))) :invalid-signed-content-type))))
+
 (defn verify-passport
   "Only document authenticity. Caller must obtain holder binding, human review,
   fresh screening and a canonical issuance reservation separately. `policy` is
@@ -103,6 +117,7 @@
                      (<= 1 (count (array-seq (.-certificates signed))) 8)
                      (contains? hash-oids (.. signed -signerInfos (at 0) -digestAlgorithm -algorithmId))
                      (= "2.23.136.1.1.1" (.. signed -encapContentInfo -eContentType))) :unsupported-sod)
+      (signed-attributes! signed)
       (doseq [^js crl lists]
         (require! (and (.-nextUpdate crl) (<= (.getTime (.. crl -thisUpdate -value)) now)
                        (< now (.getTime (.. crl -nextUpdate -value)))) :stale-crl))

@@ -43,6 +43,7 @@
                event (if (= :approve (:op event))
                        (-> event
                            (assoc :holder-method (when (= "supervised-live-document-comparison" (:holder-method command)) :supervised-live-document-comparison))
-                           (update :screening #(assoc % :status (when (= "clear" (:status %)) :clear)))
+                           (update :screening #(assoc % :status (when (= "clear" (:status %)) :clear)
+                                                       :coverage (mapv {"sanctions" :sanctions "pep" :pep "adverse-media" :adverse-media} (:coverage %))))
                            (update :scope #(assoc % :status (when (= "approved" (:status %)) :approved)))) event)]
            (execute read! cas! event now))))))
