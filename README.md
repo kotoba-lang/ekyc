@@ -4,6 +4,18 @@
 
 eKYC session and evidence substrate for kotoba-lang.
 
+## First-party Kotoba Identity components (September 2026)
+
+The new `ekyc.passport`, `ekyc.identity-policy`, `ekyc.identity-crypto` and
+`ekyc.identity-authority` namespaces add cryptographic TD3 passport verification,
+review/credential lifecycle, holder-bound signed presentations and commit-gated
+free-quota effects. `native/ios` adds the NFC capture transport.
+
+These are tested components, **not a deployed identity provider**. Read
+[the implemented profile and activation boundaries](docs/kotoba-identity-v1.md).
+The original method catalog described below remains structural; its claims do
+not establish assurance for the new host.
+
 Provider APIs are host ports. This repo stores lifecycle and evidence references,
 not document images or provider secrets.
 
