@@ -1,0 +1,17 @@
+(ns ekyc.identity-authority-test
+  (:require [cljs.test :refer-macros [deftest is async]] [ekyc.identity-authority :as a]
+            [ekyc.identity-policy-test :as fixture] [ekyc.identity-passport-test :refer [rejects]]))
+(deftest effects-require-durable-commit
+  (async done
+    (let [read! #(js/Promise.resolve {:revision 7 :state fixture/reviewed})]
+      (-> (a/execute read! (fn [revision state]
+                            (is (= 7 revision)) (is (= :approved (get-in state [:applications "app" :status])))
+                            (js/Promise.resolve {:status :committed :revision 8 :receipt-ref "private:kotobase-commit"}))
+                     fixture/approval fixture/now)
+          (.then (fn [result]
+                   (is (= :issue-credential (get-in result [:effects 0 :type])))
+                   (js/Promise.all
+                    #js [(rejects #(a/execute read! (fn [_ _] (js/Promise.resolve {:status :committed :revision 7 :receipt-ref "wrong"})) fixture/approval fixture/now))
+                         (rejects #(a/execute read! (fn [_ _] (js/Promise.resolve {:status :conflict})) fixture/approval fixture/now))
+                         (rejects #(a/execute read! (fn [_ _] (js/Promise.reject (js/Error. "storage unavailable"))) fixture/approval fixture/now))])))
+          (.catch #(is false (str %))) (.finally done)))))

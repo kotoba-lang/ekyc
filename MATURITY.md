@@ -1,3 +1,11 @@
+## Kotoba Identity additions
+
+Cryptographic components and tests are implemented; production enrollment,
+canonical storage host, real trust distribution, supervised-review operations,
+phone app distribution and physical passport qualification remain pending.
+See [Kotoba Identity v1](docs/kotoba-identity-v1.md). The historical level below
+refers to the earlier provider-port substrate only.
+
 # Maturity
 
 **Level: R2 live adapter**

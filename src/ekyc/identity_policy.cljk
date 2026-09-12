@@ -1,0 +1,99 @@
+(ns ekyc.identity-policy
+  "Portable first-party identity state machine. Inputs marked verified are host
+  events only; never deserialize public requests directly into these commands.
+  The host must CAS the complete state in a private canonical Kotobase ref before
+  releasing any returned effect. No atom, SQL, clock or implicit authority here.")
+
+(def version "kotoba-identity-2026-09-v1")
+(defn text? [x] (and (string? x) (<= 1 (count x) 512)))
+(defn fresh? [start end now] (and (number? start) (number? end) (<= 0 start now) (< now end)))
+(defn denied [reason] {:ok false :reason reason})
+(defn eligibility [record now]
+  (cond
+    (not= :approved (:status record)) :review-required
+    (not (fresh? (:issued-at record) (:expires-at record) now)) :identity-expired
+    (not= :clear (get-in record [:screening :status])) :screening-required
+    (not (fresh? (get-in record [:screening :checked-at]) (get-in record [:screening :expires-at]) now)) :screening-expired
+    (not= :approved (get-in record [:scope :status])) :scope-required
+    (not (fresh? (get-in record [:scope :issued-at]) (get-in record [:scope :expires-at]) now)) :scope-expired
+    :else nil))
+
+(defn transition [state event now]
+  (let [{:keys [op id principal actor]} event record (get-in state [:applications id])]
+    (case op
+      :start
+      (cond
+        (not (and (text? id) (text? principal) (text? (:audience event)) (text? (:nonce event))
+                   (= true (:session-verified event)) (= true (:consent event))
+                   (= version (:policy-version event)) (text? (:holder-key-id event)))) (denied :invalid-application)
+        record (denied :duplicate-application)
+        :else {:ok true :state (assoc-in state [:applications id]
+                                       (select-keys (assoc event :status :pending :created-at now :expires-at (+ now 900000))
+                                                    [:id :principal :audience :nonce :holder-key-id :policy-version
+                                                     :status :created-at :expires-at]))})
+      :document
+      (cond
+        (not (and record (= principal (:principal record)) (= :pending (:status record))
+                   (< now (:expires-at record)) (= (:nonce record) (:nonce event))
+                   (true? (:holder-proof-verified event))
+                   (= :document-authentic (get-in event [:document :status]))
+                   (true? (get-in event [:document :adult]))
+                   (text? (get-in event [:document :document-tag]))
+                   (text? (get-in event [:document :sod-digest]))
+                   (text? (get-in event [:document :dg2-digest]))
+                   (text? (get-in event [:document :trust-version])))) (denied :invalid-document-evidence)
+        :else {:ok true :state (assoc-in state [:applications id]
+                                       (assoc record :status :review :document
+                                              (select-keys (:document event) [:status :adult :document-tag :sod-digest :dg2-digest :trust-version :document-expires-at])
+                                              :submitted-at now))})
+      :approve
+      (let [doc (:document record) previous (get-in state [:documents (:document-tag doc)])
+            screening (:screening event) scope (:scope event)
+            expires (:expires-at event)]
+        (cond
+          (not (and record (= :review (:status record)) (= principal (:principal record))
+                     (= true (:operator-signature-verified event)) (contains? (:reviewers state) actor)
+                     (not= actor principal) (= (:sod-digest doc) (:sod-digest event))
+                     (= (:dg2-digest doc) (:dg2-digest event))
+                     (= :supervised-live-document-comparison (:holder-method event))
+                     (= true (:holder-match event)) (= true (:liveness event))
+                     (text? (:review-evidence-ref event))
+                     (number? expires) (number? (:document-expires-at doc))
+                     (< now expires) (<= expires (:document-expires-at doc) (+ now (* 16 366 86400000)))
+                     (<= expires (+ now (* 365 86400000)))
+                     (= :clear (:status screening)) (text? (:evidence-ref screening))
+                     (every? (set (:coverage screening)) [:sanctions :pep :adverse-media])
+                     (fresh? (:checked-at screening) (:expires-at screening) now)
+                     (<= (- (:expires-at screening) (:checked-at screening)) 86400000)
+                     (= :approved (:status scope)) (text? (:id scope))
+                     (fresh? (:issued-at scope) (:expires-at scope) now))) (denied :review-incomplete)
+          (and previous (not= principal previous)) (denied :document-already-bound)
+          :else {:ok true :state (-> state
+                                    (assoc-in [:documents (:document-tag doc)] principal)
+                                    (assoc-in [:credentials id] {:status :active :application-id id})
+                                    (assoc-in [:applications id] (assoc record :status :approved :issued-at now :expires-at expires
+                                                                       :reviewer actor :review-evidence-ref (:review-evidence-ref event)
+                                                                       :screening screening :scope scope)))
+                 :effects [{:type :issue-credential :application-id id}] }))
+      :revoke
+      (if (and record (true? (:operator-signature-verified event)) (contains? (:reviewers state) actor)
+               (text? (:reason-ref event)))
+        {:ok true :state (-> state
+                             (assoc-in [:applications id] (assoc record :status :revoked :revoked-at now :reason-ref (:reason-ref event)))
+                             (assoc-in [:credentials id :status] :revoked))}
+        (denied :revocation-not-authorized))
+      :reserve
+      (let [request-id (:request-id event) used (get-in state [:usage [principal (:utc-day event)]] 0)]
+        (cond
+          (not (and (true? (:session-verified event)) (= principal (:principal record))
+                     (text? request-id) (integer? (:utc-day event))
+                     (= (:utc-day event) (quot now 86400000)))) (denied :invalid-reservation)
+          (eligibility record now) (denied (eligibility record now))
+          (not= (:scope-id event) (get-in record [:scope :id])) (denied :scope-mismatch)
+          (not (contains? #{:code-review :vulnerability-triage :remediation} (:task event))) (denied :task-not-allowed)
+          (get-in state [:requests request-id]) (denied :request-already-reserved)
+          (>= used 50) (denied :free-quota-exhausted)
+          :else {:ok true :state (-> state (assoc-in [:usage [principal (:utc-day event)]] (inc used))
+                                    (assoc-in [:requests request-id] {:principal principal :application-id id :status :reserved :at now}))
+                 :effects [{:type :infer :request-id request-id :billing :free}]}))
+      (denied :unknown-operation))))
