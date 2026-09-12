@@ -27,7 +27,7 @@
          (t/projection (get-in web-approved [:applications "web"]) f/now)))
   (is (nil? (p/eligibility (get-in web-approved [:applications "web"]) f/now)))
   (is (= :free (get-in (p/transition web-approved
-                        {:op :reserve :id "web" :principal "alice" :session-verified true :scope-id "scope"
+                        {:op :reserve :id "web" :principal "alice" :session-verified true :session-id "session-a" :scope-id "scope"
                          :task :code-review :utc-day (quot f/now 86400000) :request-id "first-web-request"}
                         f/now) [:effects 0 :billing])))
   (doseq [change [{:actor "alice"} {:operator-signature-verified false} {:document-checked false}

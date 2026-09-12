@@ -15,6 +15,11 @@ The v2 profile adds a [Web-first weighted trust route](docs/weighted-trust-route
 signed Web review contributes 60 points and an independently reviewed app passport
 route contributes 80, capped at 100. Review, scope and screening remain hard gates.
 
+[Continuous session evidence](docs/continuous-session-evidence.md) adds signed
+observer events, discounted Beta/Subjective Logic support, persistent alerts,
+source-key revocation checks and a current-session gate before free reservations.
+The model is explicitly uncalibrated; production observers remain unconnected.
+
 These are tested components, **not a deployed identity provider**. Read
 [the implemented profile and activation boundaries](docs/kotoba-identity-v1.md).
 The original method catalog described below remains structural; its claims do

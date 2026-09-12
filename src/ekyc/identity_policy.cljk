@@ -3,7 +3,7 @@
   events only; never deserialize public requests directly into these commands.
   The host must CAS the complete state in a private canonical Kotobase ref before
   releasing any returned effect. No atom, SQL, clock or implicit authority here."
-  (:require [ekyc.identity-trust :as trust]))
+  (:require [ekyc.identity-trust :as trust] [ekyc.identity-session :as session]))
 
 (def version "kotoba-identity-2026-09-v2")
 (defn text? [x] (and (string? x) (<= 1 (count x) 512)))
@@ -24,6 +24,7 @@
 (defn transition [state event now]
   (let [{:keys [op id principal actor]} event record (get-in state [:applications id])]
     (case op
+      :observe-session (session/transition state event now)
       :start
       (cond
         (not (and (text? id) (text? principal) (text? (:audience event)) (text? (:nonce event))
@@ -168,6 +169,8 @@
                      (text? request-id) (integer? (:utc-day event))
                      (= (:utc-day event) (quot now 86400000)))) (denied :invalid-reservation)
           (eligibility record now) (denied (eligibility record now))
+          (session/decision state (:session-id event) principal (:holder-key-id record) (:task event) now)
+          (denied (session/decision state (:session-id event) principal (:holder-key-id record) (:task event) now))
           (not= (:scope-id event) (get-in record [:scope :id])) (denied :scope-mismatch)
           (not (contains? #{:code-review :vulnerability-triage :remediation} (:task event))) (denied :task-not-allowed)
           (get-in state [:requests request-id]) (denied :request-already-reserved)
