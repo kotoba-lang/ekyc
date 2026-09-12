@@ -2,7 +2,8 @@
   "WebCrypto host for first-party credentials and holder-bound presentations.
   This is a versioned Kotoba JWS profile, not an SD-JWT/ZK or W3C certification.
   The issuer host owns private keys; verifier keys/status are explicit trusted ports."
-  (:require [ekyc.passport :as passport] [ekyc.identity-policy :as policy]))
+  (:require [ekyc.passport :as passport] [ekyc.identity-policy :as policy]
+            [ekyc.identity-trust :as trust]))
 
 (defn seconds [milliseconds] (js/Math.floor (/ milliseconds 1000)))
 (defn fresh-claims? [claims now]
@@ -46,7 +47,7 @@
                (passport/require! (= key-id (:holder-key-id record)) :holder-key-mismatch)
                (sign key kid "kotoba-identity+jwt"
         {:iss issuer :sub subject :aud (:audience record) :jti id :iat (seconds now) :exp (seconds (:expires-at record))
-         :policy policy/version :adult true :assurance "supervised-document-v1"
+         :policy policy/version :adult true :assurance "reviewed-identity-v2" :trust-policy trust/version
          :cnf {:jwk (select-keys holder-jwk [:kty :crv :x])}})))))
 (defn present [holder-key holder-kid credential audience nonce now]
   (-> (passport/sha256 (utf8 credential))
@@ -59,7 +60,7 @@
          (passport/require! (and (= issuer (:iss claims)) (= policy/version (:policy claims))
                                 (= (:audience expected) (:aud claims)) (policy/text? (:sub claims))
                                 (policy/text? (:jti claims)) (= true (:adult claims))
-                                (= "supervised-document-v1" (:assurance claims))
+                                (= "reviewed-identity-v2" (:assurance claims)) (= trust/version (:trust-policy claims))
                                 (fresh-claims? claims now)
                                 (<= (- (:exp claims) (:iat claims)) (* 365 86400))
                                 (policy/text? (:nonce expected)) (= false (:consumed expected))
