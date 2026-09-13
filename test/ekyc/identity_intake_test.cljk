@@ -1,12 +1,16 @@
 (ns ekyc.identity-intake-test
   (:require [cljs.test :refer-macros [deftest is async]] [ekyc.identity-intake :as i]
+            [ekyc.researcher-profile :as profile]
             [ekyc.identity-intake-service :as service] [ekyc.identity-vault :as v] [ekyc.identity-intake-host :as h]
             [ekyc.identity-crypto :as c] [ekyc.identity-passport-test :refer [rejects]]))
 (def now 1789180000000)
+(def profile-none {:version profile/version :affiliation {:kind "independent"}
+                   :qualification-status "none" :qualifications []})
+(def review-none {:version profile/version :affiliation {:status "declared-none"} :qualifications []})
 (def start {:op :intake-start :id "case" :principal "alice" :authenticated true :consent true
             :notice-version i/version :nonce "nonce" :holder-key-id "holder" :holder-jwk {:kty "OKP"}
             :holder-proof-verified true :key-ref "kms:case" :purpose "Review owned code" :scope "owned-repo"
-            :expires-at (+ now 604800000)})
+            :expires-at (+ now 604800000) :researcher-profile profile-none})
 (def initial {:reviewers #{"reviewer" "alice"} :reviewer-keys {"reviewer" {:status :active :key-id "review-key" :key-thumbprint "thumb"}
                                                              "alice" {:status :active}}})
 (def capturing (:state (i/transition initial start now)))
@@ -62,11 +66,17 @@
                    (js/Promise.all #js [(rejects #(v/read-evidence! ports "case" "mallory" :document now))
                                         (rejects #(v/unseal @key (c/utf8 "wrong case") (second (first @blocks))))
                                         (rejects #(v/store-evidence! ports "case" "alice" :document "image/jpeg" bytes now))])))
+          (.then (fn [_] (h/dispatch! ports "profile" "alice" {:id "case"} now)))
+          (.then (fn [result]
+                   (is (= profile-none (:researcherProfile result)))
+                   (is (some #(= :profile-read (:action %)) (vals (get-in @db [:state :intake-audit]))))
+                   (rejects #(h/dispatch! ports "profile" "mallory" {:id "case"} now))))
           (.then (fn [_] (v/delete-case! ports "case" "alice" now)))
           (.then (fn [_]
                    (is @destroyed)
                    (is (= :deleted (get-in @db [:state :intake "case" :status])))
                    (is (nil? (get-in @db [:state :intake "case" :evidence])))
+                   (is (nil? (get-in @db [:state :intake "case" :researcher-profile])))
                    (rejects #(v/read-evidence! ports "case" "alice" :document now))))
           (.catch #(is false (str %))) (.finally done)))))
 
@@ -74,6 +84,7 @@
   (let [s (:state (i/transition submitted (assoc (event :intake-claim) :principal "reviewer") now))
         approval (assoc (event :intake-approve) :principal "reviewer" :expected-revision (get-in s [:intake "case" :revision])
                         :operator-signature-verified true :reviewer-key-id "review-key" :reviewer-key-thumbprint "thumb"
+                        :profile-review review-none
                         :supervised-live-session true :live-session-ref "private:live-session"
                         :holder-method :supervised-live-video-document-comparison :document-checked true
                         :adult true :holder-match true :liveness true :document-tag "hmac:document"
@@ -88,7 +99,8 @@
     (is (= :issue-credential (get-in result [:effects 0 :type])))
     (doseq [bad [(assoc approval :supervised-live-session false) (dissoc approval :screening)
                  (assoc approval :expected-revision 0) (assoc approval :reviewer-key-thumbprint "rotated")
-                 (assoc approval :operator-signature-verified false) (assoc approval :adult false)]]
+                 (assoc approval :operator-signature-verified false) (assoc approval :adult false)
+                 (dissoc approval :profile-review)]]
       (is (false? (:ok (i/transition s bad now)))))
     (is (false? (:ok (i/transition (:state result) approval now))))))
 
@@ -103,7 +115,7 @@
                  :create-key! (fn [_] (js/Promise.resolve "kms:new-case"))
                  :put-block! (fn [& _]) :get-block! (fn [& _]) :key! (fn [& _]) :destroy-key! (fn [& _])}
           claims {:principal "alice" :aud "https://kotoba.cloud" :action "start" :consent true
-                  :notice-version i/version :purpose "owned code" :scope "own-repo"
+                  :notice-version i/version :purpose "owned code" :scope "own-repo" :researcher-profile profile-none
                   :iat (c/seconds now) :exp (+ (c/seconds now) 120)}]
       (-> (.generateKey (.-subtle js/crypto) "Ed25519" true #js ["sign" "verify"])
           (.then (fn [keys] (reset! private-key (.-privateKey keys)) (.exportKey (.-subtle js/crypto) "jwk" (.-publicKey keys))))
@@ -117,6 +129,7 @@
                      (is (= "alice" (:principal r)))
                      (is (= (:nonce receipt) (:nonce r)))
                      (is (= :capturing (:status r)))
+                     (is (= profile-none (:researcher-profile r)))
                      (is (not (contains? receipt :key-ref)))
                      (-> (c/holder-key-id @public-jwk)
                          (.then (fn [thumb]
