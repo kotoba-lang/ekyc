@@ -1,9 +1,10 @@
 (ns ekyc.identity-intake
   "Pure browser intake and reviewer workflow. All events are trusted host outputs;
   client JSON cannot assert authentication, stored evidence, or reviewer identity."
-  (:require [ekyc.identity-policy :as identity]))
+  (:require [ekyc.identity-policy :as identity]
+            [ekyc.researcher-profile :as profile]))
 
-(def version "kotoba-web-intake-2026-09-v1")
+(def version "kotoba-web-intake-2026-09-v2")
 (def slots #{:document :live-video})
 (def max-bytes {:document 2097152 :live-video 6291456})
 (def media-types {:document #{"image/jpeg"} :live-video #{"video/webm" "video/mp4"}})
@@ -16,8 +17,10 @@
   (let [r (get-in state [:intake id])]
     (and r (fresh? r now) (not (contains? #{:deleted :deleting} (:status r)))
          (or (owner? r principal) (and (reviewer? state principal) (= principal (:reviewer r)))))))
-(defn public-record [r]
-  (select-keys r [:id :status :created-at :expires-at :submitted-at :reason :revision]))
+(defn public-record
+  ([r] (select-keys r [:id :status :created-at :expires-at :submitted-at :reason :revision]))
+  ([r now] (cond-> (public-record r)
+             (:researcher-profile r) (assoc :profileSummary (profile/summary (:researcher-profile r) (:profile-review r) now)))))
 (defn signed-review? [state r event]
   (and (= (:principal event) (:reviewer r)) (reviewer? state (:principal event))
        (not= (:principal event) (:principal r))
@@ -42,13 +45,14 @@
                     (text? (:nonce event)) (text? (:holder-key-id event)) (map? (:holder-jwk event))
                     (true? (:holder-proof-verified event)) (text? (:key-ref event))
                     (text? (:purpose event)) (text? (:scope event))
+                    (profile/valid? (:researcher-profile event))
                     (number? (:expires-at event)) (< now (:expires-at event) (+ now 604800001))))
           (identity/denied :invalid-intake)
           (some #(and (= principal (:principal %)) (fresh? % now)
                       (not (contains? #{:deleted :rejected :approved} (:status %)))) (vals (:intake state)))
           (identity/denied :active-case-exists)
           :else (update-r (assoc (select-keys event [:id :principal :nonce :holder-key-id :holder-jwk :key-ref
-                                                     :purpose :scope :notice-version :expires-at])
+                                                     :purpose :scope :notice-version :expires-at :researcher-profile])
                                 :created-at now :status :capturing :capture-expires-at (+ now 900000))))
         :intake-evidence
         (if (and own (= :capturing (:status r)) (fresh? r now) (< now (:capture-expires-at r))
@@ -79,16 +83,23 @@
           {:ok true :state (assoc-in state [:intake-audit (:audit-id event)]
                                     {:id id :actor principal :slot (:slot event) :at now :action :evidence-read})}
           (identity/denied :evidence-access-denied))
+        :intake-profile-read
+        (if (and (access? state id principal now) (text? (:audit-id event))
+                 (< (count (filter #(= id (:id %)) (vals (:intake-audit state)))) 1024))
+          {:ok true :state (assoc-in state [:intake-audit (:audit-id event)]
+                                    {:id id :actor principal :at now :action :profile-read})}
+          (identity/denied :profile-access-denied))
         :intake-reject
         (if (and (= :in-review (:status r)) (= principal (:reviewer r))
                  (reviewer? state principal) (not own) (fresh? r now)
                  (signed-review? state r event)
-                 (contains? #{:document-unreadable :holder-check-required :screening-review :scope-review} (:reason event)))
+                 (contains? #{:document-unreadable :holder-check-required :screening-review :scope-review :affiliation-review :qualification-review} (:reason event)))
           (update-r (assoc r :status :rejected :reason (:reason event) :decided-at now))
           (identity/denied :review-not-authorized))
         :intake-approve
         (if (and (= :in-review (:status r)) (fresh? r now) (signed-review? state r event)
-                 (true? (:supervised-live-session event)) (text? (:live-session-ref event)))
+                 (true? (:supervised-live-session event)) (text? (:live-session-ref event))
+                 (profile/reviewed? (:researcher-profile r) (:profile-review event) now))
           (let [base {:id id :principal (:principal r) :audience "https://kotoba.cloud" :nonce (:nonce r)
                       :holder-key-id (:holder-key-id r) :policy-version identity/version
                       :session-verified true :consent true}
@@ -106,7 +117,7 @@
             (if (:ok result)
               (update result :state assoc-in [:intake id]
                       (assoc r :status :approved :decided-at now :revision (inc (:revision r))
-                             :live-session-ref (:live-session-ref event)))
+                             :live-session-ref (:live-session-ref event) :profile-review (:profile-review event)))
               (identity/denied (or (:reason result) (:reason submitted) (:reason started) :review-incomplete))))
           (identity/denied :review-not-authorized))
         :intake-delete

@@ -2,7 +2,7 @@
   "Intake application host. Principal is supplied by authenticated service binding;
   never take it from public JSON. KMS and Kotobase ports require prior qualification."
   (:require [ekyc.identity-vault :as vault] [ekyc.identity-intake :as intake]
-            [ekyc.identity-crypto :as crypto] [ekyc.passport :as p]))
+            [ekyc.identity-crypto :as crypto] [ekyc.passport :as p] [ekyc.researcher-profile :as profile]))
 (defn holder-key! [jwk]
   (p/require! (and (= #{:kty :crv :x} (set (keys jwk))) (= "OKP" (:kty jwk)) (= "Ed25519" (:crv jwk))) :invalid-holder-key)
   (.importKey (.-subtle js/crypto) "jwk" (clj->js jwk) "Ed25519" false #js ["verify"]))
@@ -20,7 +20,8 @@
   (-> (proof! jwk signed principal now)
       (.then (fn [claims]
                (p/require! (and (= "start" (:action claims)) (= intake/version (:notice-version claims))
-                                (true? (:consent claims)) (intake/text? (:purpose claims)) (intake/text? (:scope claims))) :invalid-intake-consent)
+                                (true? (:consent claims)) (intake/text? (:purpose claims)) (intake/text? (:scope claims))
+                                (profile/valid? (:researcher-profile claims))) :invalid-intake-consent)
                (let [id (str (random-uuid)) nonce (str (random-uuid))]
                  (-> (crypto/holder-key-id jwk)
                      (.then (fn [holder-id]
@@ -29,6 +30,7 @@
                                            (-> (vault/commit! ports {:op :intake-start :id id :principal principal :authenticated true
                                                                     :nonce nonce :holder-key-id holder-id :holder-jwk jwk :holder-proof-verified true
                                                                     :consent true :notice-version intake/version :purpose (:purpose claims) :scope (:scope claims)
+                                                                    :researcher-profile (:researcher-profile claims)
                                                                     :key-ref key-ref :expires-at (+ now 604800000)} now)
                                                (.then (fn [receipt] {:id id :nonce nonce :expiresAt (+ now 900000) :receiptId (:receipt-ref receipt)}))
                                                ;; A failed/unknown CAS may have committed: never destroy a key on ambiguous failure.
@@ -67,20 +69,21 @@
                                                                      :reviewer-key-id (:key-id registry) :reviewer-key-thumbprint thumb
                                                                      :holder-method (when (= "supervised-live-video-document-comparison" (:holder-method claims)) :supervised-live-video-document-comparison)
                                                                      :reason ({"document-unreadable" :document-unreadable "holder-check-required" :holder-check-required
-                                                                               "screening-review" :screening-review "scope-review" :scope-review} (:reason claims)))
+                                                                               "screening-review" :screening-review "scope-review" :scope-review
+                                                                               "affiliation-review" :affiliation-review "qualification-review" :qualification-review} (:reason claims)))
                                                               (update :screening #(assoc % :status (when (= "clear" (:status %)) :clear)
                                                                                           :coverage (mapv {"sanctions" :sanctions "pep" :pep "adverse-media" :adverse-media} (:coverage %))))
                                                               (update :scope #(assoc % :status (when (= "approved" (:status %)) :approved)))) now))))))))))))
 
-(defn status! [ports principal]
+(defn status! [ports principal now]
   (vault/validate-ports! ports)
   (-> ((:read! ports))
       (.then (fn [{:keys [state]}]
-               {:policyVersion intake/version :principalId principal :intakeEnabled (and (true? (:intake-enabled? ports)) (true? (:notice-approved? ports)))
-                :cases (mapv intake/public-record (filter #(= principal (:principal %)) (vals (:intake state))))
+               {:policyVersion intake/version :profilePolicyVersion profile/version :principalId principal :intakeEnabled (and (true? (:intake-enabled? ports)) (true? (:notice-approved? ports)))
+                :cases (mapv #(intake/public-record % now) (filter #(= principal (:principal %)) (vals (:intake state))))
                 :reviewer (intake/reviewer? state principal)
                 :queue (if (intake/reviewer? state principal)
-                         (mapv intake/public-record (take 50 (filter #(and (not= principal (:principal %))
+                         (mapv #(intake/public-record % now) (take 50 (filter #(and (not= principal (:principal %))
                                                                                         (or (= :pending-review (:status %))
                                                                                             (= principal (:reviewer %)))) (vals (:intake state))))) [])}))))
 
@@ -92,7 +95,15 @@
   (p/require! (intake/text? principal) :authentication-required)
   (let [id (:id body)]
     (case operation
-      "status" (status! ports principal)
+      "status" (status! ports principal now)
+      "profile" (-> (vault/commit! ports {:op :intake-profile-read :id id :principal principal
+                                          :authenticated true :audit-id (str (random-uuid))} now)
+                    (.then #((:read! ports)))
+                    (.then (fn [{:keys [state]}]
+                             (let [r (get-in state [:intake id])]
+                               (p/require! (intake/access? state id principal now) :profile-access-denied)
+                               {:id id :revision (:revision r) :researcherProfile (:researcher-profile r)
+                                :profileSummary (profile/summary (:researcher-profile r) (:profile-review r) now)}))))
       "start" (begin! ports principal (:holderJwk body) (:proof body) now)
       "submit" (submit! ports principal id (:proof body) now)
       "claim" (vault/commit! ports {:op :intake-claim :id id :principal principal :authenticated true} now)
