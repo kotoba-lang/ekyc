@@ -1,5 +1,5 @@
 (ns ekyc.adapters.provider-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [ekyc.adapters.provider :as a]
             [ekyc.core :as c]
             [ekyc.model :as m]))

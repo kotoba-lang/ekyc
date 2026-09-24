@@ -9,7 +9,7 @@
   queries against it. If `schema-datascript` regressed to include a
   Datomic-only key, `create-conn` below would throw immediately."
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [datascript.core :as d]
             [kotoba.ekyc :as ekyc]
             [kotoba.ekyc.jurisdiction-graph :as jg]))

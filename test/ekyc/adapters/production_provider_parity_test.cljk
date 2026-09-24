@@ -18,7 +18,7 @@
   the same inputs. Guest document encoding follows the KIR interpreter's
   admitted shape (see kotoba.kir.value/bounded-document!): [\"map\" ...]
   with plain keyword keys and tagged payloads."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [ekyc.adapters.provider :as provider]
             [ekyc.adapters.production-provider :as pp]
             [kotoba.compiler.core :as compiler]

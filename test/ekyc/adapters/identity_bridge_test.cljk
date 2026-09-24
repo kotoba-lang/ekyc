@@ -1,5 +1,5 @@
 (ns ekyc.adapters.identity-bridge-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [ekyc.adapters.identity-bridge :as bridge]
             [ekyc.model :as m]
             [identity.adapters.ledger :as ledger]))
