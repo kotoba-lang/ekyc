@@ -1,5 +1,5 @@
 (ns ekyc.adapters.edn-provider-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [ekyc.adapters.edn-provider :as edn-provider]
             [ekyc.adapters.provider :as provider]
             [ekyc.core :as c]

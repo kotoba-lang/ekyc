@@ -1,5 +1,5 @@
 (ns kotoba.ekyc.ui-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.ekyc :as ekyc]
             [kotoba.ekyc.ui :as ui]))
 

@@ -1,5 +1,5 @@
 (ns ekyc.adapters.kagi-custody-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [ekyc.adapters.kagi-custody :as kagi]
             [ekyc.adapters.provider :as provider]))
 

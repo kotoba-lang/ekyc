@@ -1,5 +1,5 @@
 (ns ekyc.core-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [ekyc.core :as c]
             [ekyc.datom :as d]
             [ekyc.model :as m]
