@@ -1,17 +1,17 @@
 (ns ekyc.adapters.edn-provider
   (:require [kotoba.lang.edn :as edn]
-            [clojure.java.io :as io]
+            [kotoba.io :as io]
             [ekyc.adapters.provider :as provider]))
 
 (defn- read-state [file]
-  (if (.exists (io/file file))
+  (if (io/exists? (io/file file))
     (edn/read-string (slurp file))
     {:sessions {} :evidence {} :custody []}))
 
 (defn- write-state! [file state]
   (let [f (io/file file)]
-    (when-let [parent (.getParentFile f)]
-      (.mkdirs parent))
+    (when-let [parent (io/parent-file f)]
+      (io/mkdirs parent))
     (spit f (pr-str state))
     state))
 
