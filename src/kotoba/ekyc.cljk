@@ -44,7 +44,7 @@
   *strength category* -- FAIR/STRONG/SUPERIOR -- and proofing *attendance
   type*), so several methods do not map cleanly and are flagged as such
   rather than forced onto a level."
-  (:require [clojure.set :as set]))
+  (:require [kotoba.lang.coll :as set]))
 
 ;; ---------------------------------------------------------------------------
 ;; Method catalog -- 犯収法施行規則 第6条第1項 (individual: 第1号, corporate: 第3号)
