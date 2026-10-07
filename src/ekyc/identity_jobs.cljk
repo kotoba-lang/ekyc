@@ -2,6 +2,7 @@
   "Private durable research jobs. The host supplies qualified Kotobase read/CAS
   ports and the existing verified identity command. Never expose this API directly
   to a browser. Compatibility host implementation; not native/Q9 qualification."
+  (:refer-clojure :exclude [run!])
   (:require [ekyc.identity-policy :as policy] [ekyc.identity-session :as session]))
 
 (def model "qwen3.8-flash-next-cybersecurity-nvfp4")
