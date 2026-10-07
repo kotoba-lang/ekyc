@@ -1,5 +1,5 @@
 (ns ekyc.adapters.vc-issuer-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [ekyc.adapters.vc-issuer :as vc]
             [ekyc.model :as m]))
 
